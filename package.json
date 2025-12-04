@@ -1,0 +1,27 @@
+{
+  "name": "cpeservice",
+  "version": "1.0.0",
+  "description": "GraphQL API service for blockchain RPC interactions",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["graphql", "blockchain", "rpc", "ethereum"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@apollo/server": "^5.2.0",
+    "dotenv": "^17.2.3",
+    "ethers": "^6.16.0",
+    "graphql": "^16.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
