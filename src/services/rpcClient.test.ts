@@ -44,10 +44,6 @@ describe('RPCClient', () => {
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   describe('Constructor', () => {
     it('should create RPCClient with provider only (no signer)', () => {
       const client = new RPCClient(mockRpcUrl);
