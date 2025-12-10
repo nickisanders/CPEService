@@ -8,12 +8,17 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:run": "vitest run",
     "test:coverage": "vitest run --coverage"
   },
-  "keywords": ["graphql", "blockchain", "rpc", "ethereum"],
+  "keywords": [
+    "graphql",
+    "blockchain",
+    "rpc",
+    "ethereum"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
