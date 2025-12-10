@@ -226,15 +226,18 @@ export class RPCClient {
     const rawCertificates = await typedContract.getAllNFTsByOwner(ownerAddress);
 
     // Map the raw tuple array to typed CertificateData objects
-    const certificates: CertificateData[] = rawCertificates.map((cert: any) => ({
-      name: cert[0] as string,
-      certificateId: cert[1] as string,
-      courseTitle: cert[2] as string,
-      issuer: cert[3] as string,
-      dateIssued: BigInt(cert[4]),
-      completionDate: BigInt(cert[5]),
-      cpeHours: BigInt(cert[6])
-    }));
+    const certificates: CertificateData[] = rawCertificates.map((cert: any) => {
+      const [name, certificateId, courseTitle, issuer, dateIssued, completionDate, cpeHours] = cert;
+      return {
+        name: name as string,
+        certificateId: certificateId as string,
+        courseTitle: courseTitle as string,
+        issuer: issuer as string,
+        dateIssued: BigInt(dateIssued),
+        completionDate: BigInt(completionDate),
+        cpeHours: BigInt(cpeHours)
+      };
+    });
 
     return certificates;
   }
