@@ -25,3 +25,7 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Test coverage
+coverage/
+.coverage/
