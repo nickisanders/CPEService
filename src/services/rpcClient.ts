@@ -1,6 +1,27 @@
 import { ethers } from 'ethers';
 
 /**
+ * Certificate data structure matching the Solidity contract
+ */
+export interface CertificateData {
+  name: string;
+  certificateId: string;
+  courseTitle: string;
+  issuer: string;
+  dateIssued: bigint;
+  completionDate: bigint;
+  cpeHours: bigint;
+}
+
+/**
+ * Certificate with metadata from tokenURI
+ */
+export interface CertificateWithMetadata extends CertificateData {
+  tokenURI?: string;
+  metadata?: any;
+}
+
+/**
  * RPC Client service for blockchain interactions
  * Connects to an Ethereum-compatible RPC node
  *
@@ -167,5 +188,135 @@ export class RPCClient {
    */
   getSignerAddress(): string | undefined {
     return this.wallet?.address;
+  }
+
+  /**
+   * Get all CPE certificate NFTs owned by a specific address.
+   * 
+   * Calls the contract's getAllNFTsByOwner function which returns an array of CertificateData structs.
+   * 
+   * @param contractAddress - The deployed CPECertificate contract address
+   * @param ownerAddress - The wallet address to query certificates for
+   * @returns Array of certificate data owned by the address
+   */
+  async getAllCertificatesByOwner(
+    contractAddress: string,
+    ownerAddress: string
+  ): Promise<CertificateData[]> {
+    // Minimal ABI for the getAllNFTsByOwner function
+    const abi = [
+      'function getAllNFTsByOwner(address owner) public view returns (tuple(string name, string certificateId, string courseTitle, string issuer, uint256 dateIssued, uint256 completionDate, uint256 cpeHours)[])'
+    ];
+
+    // Use provider for read-only operations (no signer needed)
+    const contract = new ethers.Contract(contractAddress, abi, this.provider);
+
+    // Narrow the contract type so TypeScript knows getAllNFTsByOwner exists after our runtime check
+    type GetAllNFTsFn = (owner: string) => Promise<any[]>;
+
+    const typedContract = contract as unknown as { getAllNFTsByOwner?: GetAllNFTsFn };
+
+    if (typeof typedContract.getAllNFTsByOwner !== 'function') {
+      throw new Error(
+        'getAllNFTsByOwner function not found on contract. Check the contract address and ABI match the deployed contract.'
+      );
+    }
+
+    // Call the contract function
+    const rawCertificates = await typedContract.getAllNFTsByOwner(ownerAddress);
+
+    // Map the raw tuple array to typed CertificateData objects
+    const certificates: CertificateData[] = rawCertificates.map((cert: any) => ({
+      name: cert[0] as string,
+      certificateId: cert[1] as string,
+      courseTitle: cert[2] as string,
+      issuer: cert[3] as string,
+      dateIssued: BigInt(cert[4]),
+      completionDate: BigInt(cert[5]),
+      cpeHours: BigInt(cert[6])
+    }));
+
+    return certificates;
+  }
+
+  /**
+   * Get all CPE certificate NFTs owned by a specific address WITH their metadata from tokenURIs.
+   * 
+   * This fetches both the on-chain certificate data and the off-chain metadata (JSON).
+   * 
+   * @param contractAddress - The deployed CPECertificate contract address
+   * @param ownerAddress - The wallet address to query certificates for
+   * @param fetchMetadata - Whether to fetch the JSON metadata from tokenURIs (default: true)
+   * @returns Array of certificates with optional metadata
+   */
+  async getAllCertificatesWithMetadata(
+    contractAddress: string,
+    ownerAddress: string,
+    fetchMetadata: boolean = true
+  ): Promise<CertificateWithMetadata[]> {
+    // First get base certificate data
+    const certificates = await this.getAllCertificatesByOwner(contractAddress, ownerAddress);
+
+    // If not fetching metadata, return early
+    if (!fetchMetadata) {
+      return certificates;
+    }
+
+    // ABI for additional functions needed to get tokenURIs
+    const abi = [
+      'function tokenOfOwnerByIndex(address owner, uint256 index) public view returns (uint256)',
+      'function tokenURI(uint256 tokenId) public view returns (string)'
+    ];
+
+    const contract = new ethers.Contract(contractAddress, abi, this.provider);
+
+    // Narrow the contract type
+    type TokenOfOwnerByIndexFn = (owner: string, index: bigint) => Promise<bigint>;
+    type TokenURIFn = (tokenId: bigint) => Promise<string>;
+
+    const typedContract = contract as unknown as {
+      tokenOfOwnerByIndex?: TokenOfOwnerByIndexFn;
+      tokenURI?: TokenURIFn;
+    };
+
+    if (typeof typedContract.tokenOfOwnerByIndex !== 'function') {
+      throw new Error(
+        'tokenOfOwnerByIndex function not found on contract. Check the contract address and ABI match the deployed contract.'
+      );
+    }
+
+    if (typeof typedContract.tokenURI !== 'function') {
+      throw new Error(
+        'tokenURI function not found on contract. Check the contract address and ABI match the deployed contract.'
+      );
+    }
+
+    // Fetch metadata for each certificate
+    const certificatesWithMetadata: CertificateWithMetadata[] = await Promise.all(
+      certificates.map(async (cert, index) => {
+        try {
+          // Get token ID for this index
+          const tokenId = await typedContract.tokenOfOwnerByIndex!(ownerAddress, BigInt(index));
+
+          // Get tokenURI
+          const uri = await typedContract.tokenURI!(tokenId);
+
+          // Fetch metadata from URI
+          try {
+            const response = await fetch(uri);
+            const metadata = await response.json();
+            return { ...cert, tokenURI: uri, metadata };
+          } catch (fetchError) {
+            console.warn(`Failed to fetch metadata from ${uri}:`, fetchError);
+            return { ...cert, tokenURI: uri };
+          }
+        } catch (error) {
+          console.warn(`Failed to get tokenURI for certificate at index ${index}:`, error);
+          return cert;
+        }
+      })
+    );
+
+    return certificatesWithMetadata;
   }
 }

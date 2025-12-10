@@ -415,4 +415,492 @@ describe('RPCClient', () => {
       });
     });
   });
+
+  describe('getAllCertificatesByOwner', () => {
+    const mockOwnerAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+    const mockCertificates = [
+      [
+        'John Doe',
+        'CERT-001',
+        'Blockchain Basics',
+        'Tech University',
+        BigInt(1704067200),
+        BigInt(1704153600),
+        BigInt(10)
+      ],
+      [
+        'Jane Smith',
+        'CERT-002',
+        'Smart Contracts',
+        'Dev Academy',
+        BigInt(1704240000),
+        BigInt(1704326400),
+        BigInt(15)
+      ]
+    ];
+
+    describe('Success Cases', () => {
+      it('should successfully retrieve all certificates for an owner with multiple certificates', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue(mockCertificates);
+        const mockContractSuccess = { getAllNFTsByOwner: mockGetAllNFTs };
+        vi.mocked(ethers.Contract).mockReturnValueOnce(mockContractSuccess as any);
+
+        const result = await client.getAllCertificatesByOwner(mockContractAddress, mockOwnerAddress);
+
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({
+          name: 'John Doe',
+          certificateId: 'CERT-001',
+          courseTitle: 'Blockchain Basics',
+          issuer: 'Tech University',
+          dateIssued: BigInt(1704067200),
+          completionDate: BigInt(1704153600),
+          cpeHours: BigInt(10)
+        });
+        expect(result[1]).toEqual({
+          name: 'Jane Smith',
+          certificateId: 'CERT-002',
+          courseTitle: 'Smart Contracts',
+          issuer: 'Dev Academy',
+          dateIssued: BigInt(1704240000),
+          completionDate: BigInt(1704326400),
+          cpeHours: BigInt(15)
+        });
+        expect(mockGetAllNFTs).toHaveBeenCalledWith(mockOwnerAddress);
+      });
+
+      it('should return empty array when owner has no certificates', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue([]);
+        const mockContractEmpty = { getAllNFTsByOwner: mockGetAllNFTs };
+        vi.mocked(ethers.Contract).mockReturnValueOnce(mockContractEmpty as any);
+
+        const result = await client.getAllCertificatesByOwner(mockContractAddress, mockOwnerAddress);
+
+        expect(result).toEqual([]);
+        expect(mockGetAllNFTs).toHaveBeenCalledWith(mockOwnerAddress);
+      });
+
+      it('should correctly map tuple data to CertificateData objects with proper BigInt types', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue([mockCertificates[0]]);
+        const mockContractTypes = { getAllNFTsByOwner: mockGetAllNFTs };
+        vi.mocked(ethers.Contract).mockReturnValueOnce(mockContractTypes as any);
+
+        const result = await client.getAllCertificatesByOwner(mockContractAddress, mockOwnerAddress);
+
+        expect(result[0].dateIssued).toBeTypeOf('bigint');
+        expect(result[0].completionDate).toBeTypeOf('bigint');
+        expect(result[0].cpeHours).toBeTypeOf('bigint');
+        expect(result[0].name).toBeTypeOf('string');
+        expect(result[0].certificateId).toBeTypeOf('string');
+      });
+
+      it('should work without a signer (read-only operation)', async () => {
+        const clientNoSigner = new RPCClient(mockRpcUrl); // No private key
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue(mockCertificates);
+        const mockContractReadOnly = { getAllNFTsByOwner: mockGetAllNFTs };
+        vi.mocked(ethers.Contract).mockReturnValueOnce(mockContractReadOnly as any);
+
+        const result = await clientNoSigner.getAllCertificatesByOwner(mockContractAddress, mockOwnerAddress);
+
+        expect(result).toHaveLength(2);
+        expect(ethers.Contract).toHaveBeenCalledWith(
+          mockContractAddress,
+          expect.any(Array),
+          expect.anything() // Should be called with provider, not wallet
+        );
+      });
+    });
+
+    describe('Error Cases', () => {
+      it('should throw error if getAllNFTsByOwner function is not found on contract', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockContractWithoutFunction = {};
+        vi.mocked(ethers.Contract).mockReturnValueOnce(mockContractWithoutFunction as any);
+
+        await expect(
+          client.getAllCertificatesByOwner(mockContractAddress, mockOwnerAddress)
+        ).rejects.toThrow('getAllNFTsByOwner function not found on contract. Check the contract address and ABI match the deployed contract.');
+      });
+
+      it('should handle contract call errors gracefully', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockRejectedValue(new Error('Network error: connection timeout'));
+        const mockContractError = { getAllNFTsByOwner: mockGetAllNFTs };
+        vi.mocked(ethers.Contract).mockReturnValueOnce(mockContractError as any);
+
+        await expect(
+          client.getAllCertificatesByOwner(mockContractAddress, mockOwnerAddress)
+        ).rejects.toThrow('Network error: connection timeout');
+      });
+    });
+  });
+
+  describe('getAllCertificatesWithMetadata', () => {
+    const mockOwnerAddress = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+    const mockCertificates = [
+      [
+        'John Doe',
+        'CERT-001',
+        'Blockchain Basics',
+        'Tech University',
+        BigInt(1704067200),
+        BigInt(1704153600),
+        BigInt(10)
+      ],
+      [
+        'Jane Smith',
+        'CERT-002',
+        'Smart Contracts',
+        'Dev Academy',
+        BigInt(1704240000),
+        BigInt(1704326400),
+        BigInt(15)
+      ]
+    ];
+
+    const mockMetadata1 = {
+      name: 'CPE Certificate #001',
+      description: 'Continuing Professional Education Certificate',
+      image: 'ipfs://QmHash1/certificate.png',
+      attributes: [
+        { trait_type: 'Course', value: 'Blockchain Basics' },
+        { trait_type: 'CPE Hours', value: '10' }
+      ]
+    };
+
+    const mockMetadata2 = {
+      name: 'CPE Certificate #002',
+      description: 'Continuing Professional Education Certificate',
+      image: 'ipfs://QmHash2/certificate.png',
+      attributes: [
+        { trait_type: 'Course', value: 'Smart Contracts' },
+        { trait_type: 'CPE Hours', value: '15' }
+      ]
+    };
+
+    beforeEach(() => {
+      // Mock global fetch
+      global.fetch = vi.fn();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    describe('Success Cases', () => {
+      it('should retrieve certificates with tokenURI and metadata when fetchMetadata is true', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        // Mock getAllNFTsByOwner
+        const mockGetAllNFTs = vi.fn().mockResolvedValue(mockCertificates);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        // Mock tokenOfOwnerByIndex and tokenURI
+        const mockTokenOfOwnerByIndex = vi.fn()
+          .mockResolvedValueOnce(BigInt(1))
+          .mockResolvedValueOnce(BigInt(2));
+        const mockTokenURI = vi.fn()
+          .mockResolvedValueOnce('https://example.com/token/1')
+          .mockResolvedValueOnce('https://example.com/token/2');
+        const mockMetadataContract = {
+          tokenOfOwnerByIndex: mockTokenOfOwnerByIndex,
+          tokenURI: mockTokenURI
+        };
+
+        vi.mocked(ethers.Contract)
+          .mockReturnValueOnce(mockGetAllContract as any)
+          .mockReturnValueOnce(mockMetadataContract as any);
+
+        // Mock fetch responses
+        vi.mocked(global.fetch)
+          .mockResolvedValueOnce({
+            json: async () => mockMetadata1
+          } as Response)
+          .mockResolvedValueOnce({
+            json: async () => mockMetadata2
+          } as Response);
+
+        const result = await client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress);
+
+        expect(result).toHaveLength(2);
+        expect(result[0].tokenURI).toBe('https://example.com/token/1');
+        expect(result[0].metadata).toEqual(mockMetadata1);
+        expect(result[1].tokenURI).toBe('https://example.com/token/2');
+        expect(result[1].metadata).toEqual(mockMetadata2);
+      });
+
+      it('should fetch and parse JSON metadata from tokenURIs', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue([mockCertificates[0]]);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        const mockTokenOfOwnerByIndex = vi.fn().mockResolvedValue(BigInt(1));
+        const mockTokenURI = vi.fn().mockResolvedValue('https://example.com/token/1');
+        const mockMetadataContract = {
+          tokenOfOwnerByIndex: mockTokenOfOwnerByIndex,
+          tokenURI: mockTokenURI
+        };
+
+        vi.mocked(ethers.Contract)
+          .mockReturnValueOnce(mockGetAllContract as any)
+          .mockReturnValueOnce(mockMetadataContract as any);
+
+        vi.mocked(global.fetch).mockResolvedValueOnce({
+          json: async () => mockMetadata1
+        } as Response);
+
+        const result = await client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress);
+
+        expect(global.fetch).toHaveBeenCalledWith('https://example.com/token/1');
+        expect(result[0].metadata).toEqual(mockMetadata1);
+      });
+
+      it('should return certificates without metadata when fetchMetadata is false', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue(mockCertificates);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        vi.mocked(ethers.Contract).mockReturnValueOnce(mockGetAllContract as any);
+
+        const result = await client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress, false);
+
+        expect(result).toHaveLength(2);
+        expect(result[0].tokenURI).toBeUndefined();
+        expect(result[0].metadata).toBeUndefined();
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should handle multiple certificates with different metadata', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue(mockCertificates);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        const mockTokenOfOwnerByIndex = vi.fn()
+          .mockResolvedValueOnce(BigInt(1))
+          .mockResolvedValueOnce(BigInt(2));
+        const mockTokenURI = vi.fn()
+          .mockResolvedValueOnce('https://example.com/token/1')
+          .mockResolvedValueOnce('https://example.com/token/2');
+        const mockMetadataContract = {
+          tokenOfOwnerByIndex: mockTokenOfOwnerByIndex,
+          tokenURI: mockTokenURI
+        };
+
+        vi.mocked(ethers.Contract)
+          .mockReturnValueOnce(mockGetAllContract as any)
+          .mockReturnValueOnce(mockMetadataContract as any);
+
+        vi.mocked(global.fetch)
+          .mockResolvedValueOnce({
+            json: async () => mockMetadata1
+          } as Response)
+          .mockResolvedValueOnce({
+            json: async () => mockMetadata2
+          } as Response);
+
+        const result = await client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress);
+
+        expect(result[0].metadata).toEqual(mockMetadata1);
+        expect(result[1].metadata).toEqual(mockMetadata2);
+        expect(result[0].name).toBe('John Doe');
+        expect(result[1].name).toBe('Jane Smith');
+      });
+    });
+
+    describe('Error Cases', () => {
+      it('should handle tokenOfOwnerByIndex errors gracefully (continue with other certificates)', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue(mockCertificates);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        const mockTokenOfOwnerByIndex = vi.fn()
+          .mockRejectedValueOnce(new Error('Token not found'))
+          .mockResolvedValueOnce(BigInt(2));
+        const mockTokenURI = vi.fn().mockResolvedValue('https://example.com/token/2');
+        const mockMetadataContract = {
+          tokenOfOwnerByIndex: mockTokenOfOwnerByIndex,
+          tokenURI: mockTokenURI
+        };
+
+        vi.mocked(ethers.Contract)
+          .mockReturnValueOnce(mockGetAllContract as any)
+          .mockReturnValueOnce(mockMetadataContract as any);
+
+        vi.mocked(global.fetch).mockResolvedValue({
+          json: async () => mockMetadata2
+        } as Response);
+
+        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const result = await client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress);
+
+        expect(result).toHaveLength(2);
+        expect(result[0].tokenURI).toBeUndefined(); // First failed
+        expect(result[1].tokenURI).toBe('https://example.com/token/2'); // Second succeeded
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to get tokenURI for certificate at index 0'),
+          expect.any(Error)
+        );
+
+        consoleWarnSpy.mockRestore();
+      });
+
+      it('should handle tokenURI errors gracefully (continue with other certificates)', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue(mockCertificates);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        const mockTokenOfOwnerByIndex = vi.fn()
+          .mockResolvedValueOnce(BigInt(1))
+          .mockResolvedValueOnce(BigInt(2));
+        const mockTokenURI = vi.fn()
+          .mockRejectedValueOnce(new Error('URI not set'))
+          .mockResolvedValueOnce('https://example.com/token/2');
+        const mockMetadataContract = {
+          tokenOfOwnerByIndex: mockTokenOfOwnerByIndex,
+          tokenURI: mockTokenURI
+        };
+
+        vi.mocked(ethers.Contract)
+          .mockReturnValueOnce(mockGetAllContract as any)
+          .mockReturnValueOnce(mockMetadataContract as any);
+
+        vi.mocked(global.fetch).mockResolvedValue({
+          json: async () => mockMetadata2
+        } as Response);
+
+        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const result = await client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress);
+
+        expect(result).toHaveLength(2);
+        expect(result[0].tokenURI).toBeUndefined(); // First failed
+        expect(result[1].tokenURI).toBe('https://example.com/token/2'); // Second succeeded
+        expect(consoleWarnSpy).toHaveBeenCalled();
+
+        consoleWarnSpy.mockRestore();
+      });
+
+      it('should handle fetch errors gracefully when metadata URL is unreachable', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue([mockCertificates[0]]);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        const mockTokenOfOwnerByIndex = vi.fn().mockResolvedValue(BigInt(1));
+        const mockTokenURI = vi.fn().mockResolvedValue('https://example.com/token/1');
+        const mockMetadataContract = {
+          tokenOfOwnerByIndex: mockTokenOfOwnerByIndex,
+          tokenURI: mockTokenURI
+        };
+
+        vi.mocked(ethers.Contract)
+          .mockReturnValueOnce(mockGetAllContract as any)
+          .mockReturnValueOnce(mockMetadataContract as any);
+
+        vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+
+        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const result = await client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].tokenURI).toBe('https://example.com/token/1');
+        expect(result[0].metadata).toBeUndefined(); // Metadata fetch failed
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Failed to fetch metadata from https://example.com/token/1'),
+          expect.any(Error)
+        );
+
+        consoleWarnSpy.mockRestore();
+      });
+
+      it('should handle invalid JSON in metadata gracefully', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue([mockCertificates[0]]);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        const mockTokenOfOwnerByIndex = vi.fn().mockResolvedValue(BigInt(1));
+        const mockTokenURI = vi.fn().mockResolvedValue('https://example.com/token/1');
+        const mockMetadataContract = {
+          tokenOfOwnerByIndex: mockTokenOfOwnerByIndex,
+          tokenURI: mockTokenURI
+        };
+
+        vi.mocked(ethers.Contract)
+          .mockReturnValueOnce(mockGetAllContract as any)
+          .mockReturnValueOnce(mockMetadataContract as any);
+
+        vi.mocked(global.fetch).mockResolvedValue({
+          json: async () => {
+            throw new Error('Invalid JSON');
+          }
+        } as Response);
+
+        const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const result = await client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress);
+
+        expect(result).toHaveLength(1);
+        expect(result[0].tokenURI).toBe('https://example.com/token/1');
+        expect(result[0].metadata).toBeUndefined();
+        expect(consoleWarnSpy).toHaveBeenCalled();
+
+        consoleWarnSpy.mockRestore();
+      });
+
+      it('should throw error if tokenOfOwnerByIndex function is not found on contract', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue(mockCertificates);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        const mockMetadataContractMissing = {
+          tokenURI: vi.fn()
+        };
+
+        vi.mocked(ethers.Contract)
+          .mockReturnValueOnce(mockGetAllContract as any)
+          .mockReturnValueOnce(mockMetadataContractMissing as any);
+
+        await expect(
+          client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress)
+        ).rejects.toThrow('tokenOfOwnerByIndex function not found on contract. Check the contract address and ABI match the deployed contract.');
+      });
+
+      it('should throw error if tokenURI function is not found on contract', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        const mockGetAllNFTs = vi.fn().mockResolvedValue(mockCertificates);
+        const mockGetAllContract = { getAllNFTsByOwner: mockGetAllNFTs };
+
+        const mockMetadataContractMissing = {
+          tokenOfOwnerByIndex: vi.fn()
+        };
+
+        vi.mocked(ethers.Contract)
+          .mockReturnValueOnce(mockGetAllContract as any)
+          .mockReturnValueOnce(mockMetadataContractMissing as any);
+
+        await expect(
+          client.getAllCertificatesWithMetadata(mockContractAddress, mockOwnerAddress)
+        ).rejects.toThrow('tokenURI function not found on contract. Check the contract address and ABI match the deployed contract.');
+      });
+    });
+  });
 });
