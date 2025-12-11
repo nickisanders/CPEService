@@ -69,15 +69,40 @@ class PrivySigner extends ethers.AbstractSigner {
   }
 
   async signTransaction(transaction: ethers.TransactionRequest): Promise<string> {
-    // Privy's API endpoint for signing transactions
-    // Note: This is a placeholder - actual implementation depends on Privy's API
-    // Check Privy's documentation for the exact API method
+    // TODO: Implement using Privy's server-side API for transaction signing
+    // 
+    // This method requires integration with Privy's REST API endpoints.
+    // The implementation should:
+    // 1. Serialize the transaction using ethers.Transaction.from(transaction).unsignedSerialized
+    // 2. Call Privy's API endpoint to sign the serialized transaction
+    // 3. Return the signed transaction hex string
+    //
+    // Reference: https://docs.privy.io/guide/server-wallets/signing
+    // API endpoint example: POST /api/v1/wallets/{wallet_id}/sign_transaction
+    //
+    // Example implementation structure:
+    // const serializedTx = ethers.Transaction.from(transaction).unsignedSerialized;
+    // const response = await this.privyClient.signTransaction(this.userId, serializedTx);
+    // return response.signedTransaction;
     throw new Error('signTransaction must be implemented with Privy API - see Privy docs for wallet signing endpoint');
   }
 
   async signMessage(message: string | Uint8Array): Promise<string> {
-    // Privy's API endpoint for signing messages
-    // Note: This is a placeholder - actual implementation depends on Privy's API
+    // TODO: Implement using Privy's server-side API for message signing
+    //
+    // This method requires integration with Privy's REST API endpoints.
+    // The implementation should:
+    // 1. Convert message to appropriate format (hex string or bytes)
+    // 2. Call Privy's API endpoint to sign the message
+    // 3. Return the signature as a hex string
+    //
+    // Reference: https://docs.privy.io/guide/server-wallets/signing
+    // API endpoint example: POST /api/v1/wallets/{wallet_id}/sign_message
+    //
+    // Example implementation structure:
+    // const messageHex = typeof message === 'string' ? message : ethers.hexlify(message);
+    // const response = await this.privyClient.signMessage(this.userId, messageHex);
+    // return response.signature;
     throw new Error('signMessage must be implemented with Privy API - see Privy docs for message signing endpoint');
   }
 
