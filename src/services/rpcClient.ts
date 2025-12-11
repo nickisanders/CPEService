@@ -30,10 +30,23 @@ export interface CertificateWithMetadata extends CertificateData {
 export class RPCClient {
   private provider: ethers.JsonRpcProvider;
   private wallet?: ethers.Wallet;
+  private externalSigner?: ethers.Signer;
 
-  constructor(rpcUrl: string, privateKey?: string) {
+  /**
+   * @param rpcUrl - Ethereum RPC endpoint URL
+   * @param privateKey - Optional private key for direct wallet control (development/testing)
+   * @param externalSigner - Optional external signer (e.g., Privy signer for production)
+   */
+  constructor(
+    rpcUrl: string,
+    privateKey?: string,
+    externalSigner?: ethers.Signer
+  ) {
     this.provider = new ethers.JsonRpcProvider(rpcUrl);
-    if (privateKey) {
+    
+    if (externalSigner) {
+      this.externalSigner = externalSigner;
+    } else if (privateKey) {
       this.wallet = new ethers.Wallet(privateKey, this.provider);
     }
   }
@@ -97,6 +110,20 @@ export class RPCClient {
   }
 
   /**
+   * Get the signer to use for transactions
+   * Prioritizes external signer (Privy) over direct wallet
+   */
+  private getSigner(): ethers.Signer {
+    if (this.externalSigner) {
+      return this.externalSigner;
+    }
+    if (this.wallet) {
+      return this.wallet;
+    }
+    throw new Error('No signer available. Provide either a privateKey or externalSigner.');
+  }
+
+  /**
    * Mint a new certificate NFT by calling the deployed CPECertificate contract's mintCertificate function.
    *
    * Requirements:
@@ -129,16 +156,14 @@ export class RPCClient {
     completionDate: number | bigint,
     cpeHours: number | bigint
   ): Promise<ethers.TransactionReceipt> {
-    if (!this.wallet) {
-      throw new Error('No signer available. Instantiate RPCClient with a privateKey to perform write operations.');
-    }
+    const signer = this.getSigner();
 
     // Minimal ABI for the mintCertificate function
     const abi = [
       'function mintCertificate(address to, string tokenURI, string name, string certificateId, string courseTitle, string issuer, uint256 dateIssued, uint256 completionDate, uint256 cpeHours) public'
     ];
 
-    const contract = new ethers.Contract(contractAddress, abi, this.wallet);
+    const contract = new ethers.Contract(contractAddress, abi, signer);
 
     // Narrow the contract type so TypeScript knows mintCertificate exists after our runtime check
     type MintFn = (
@@ -184,9 +209,12 @@ export class RPCClient {
   }
 
   /**
-   * Optional helper to get the address of the configured signer/wallet.
+   * Get the address of the configured signer/wallet
    */
-  getSignerAddress(): string | undefined {
+  async getSignerAddress(): Promise<string | undefined> {
+    if (this.externalSigner) {
+      return await this.externalSigner.getAddress();
+    }
     return this.wallet?.address;
   }
 
