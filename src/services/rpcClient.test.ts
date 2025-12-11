@@ -45,32 +45,69 @@ describe('RPCClient', () => {
   });
 
   describe('Constructor', () => {
-    it('should create RPCClient with provider only (no signer)', () => {
+    it('should create RPCClient with provider only (no signer)', async () => {
       const client = new RPCClient(mockRpcUrl);
       
       expect(ethers.JsonRpcProvider).toHaveBeenCalledWith(mockRpcUrl);
       expect(ethers.Wallet).not.toHaveBeenCalled();
-      expect(client.getSignerAddress()).toBeUndefined();
+      expect(await client.getSignerAddress()).toBeUndefined();
     });
 
-    it('should create RPCClient with provider and wallet when privateKey is provided', () => {
+    it('should create RPCClient with provider and wallet when privateKey is provided', async () => {
       const client = new RPCClient(mockRpcUrl, mockPrivateKey);
       
       expect(ethers.JsonRpcProvider).toHaveBeenCalledWith(mockRpcUrl);
       expect(ethers.Wallet).toHaveBeenCalledWith(mockPrivateKey, expect.anything());
-      expect(client.getSignerAddress()).toBe('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0');
+      expect(await client.getSignerAddress()).toBe('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0');
+    });
+
+    it('should create RPCClient with external signer', async () => {
+      const mockExternalSigner = {
+        getAddress: vi.fn().mockResolvedValue('0xExternalSignerAddress123'),
+        signTransaction: vi.fn(),
+        signMessage: vi.fn()
+      } as any;
+
+      const client = new RPCClient(mockRpcUrl, undefined, mockExternalSigner);
+      
+      expect(ethers.JsonRpcProvider).toHaveBeenCalledWith(mockRpcUrl);
+      expect(ethers.Wallet).not.toHaveBeenCalled();
+      expect(await client.getSignerAddress()).toBe('0xExternalSignerAddress123');
+    });
+
+    it('should prioritize external signer over private key when both provided', async () => {
+      const mockExternalSigner = {
+        getAddress: vi.fn().mockResolvedValue('0xExternalSignerAddress123'),
+        signTransaction: vi.fn(),
+        signMessage: vi.fn()
+      } as any;
+
+      const client = new RPCClient(mockRpcUrl, mockPrivateKey, mockExternalSigner);
+      
+      expect(await client.getSignerAddress()).toBe('0xExternalSignerAddress123');
     });
   });
 
   describe('getSignerAddress', () => {
-    it('should return undefined when no private key provided', () => {
+    it('should return undefined when no private key provided', async () => {
       const client = new RPCClient(mockRpcUrl);
-      expect(client.getSignerAddress()).toBeUndefined();
+      expect(await client.getSignerAddress()).toBeUndefined();
     });
 
-    it('should return wallet address when private key provided', () => {
+    it('should return wallet address when private key provided', async () => {
       const client = new RPCClient(mockRpcUrl, mockPrivateKey);
-      expect(client.getSignerAddress()).toBe('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0');
+      expect(await client.getSignerAddress()).toBe('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0');
+    });
+
+    it('should return address from external signer', async () => {
+      const mockExternalSigner = {
+        getAddress: vi.fn().mockResolvedValue('0xExternalSignerAddress456'),
+        signTransaction: vi.fn(),
+        signMessage: vi.fn()
+      } as any;
+
+      const client = new RPCClient(mockRpcUrl, undefined, mockExternalSigner);
+      expect(await client.getSignerAddress()).toBe('0xExternalSignerAddress456');
     });
   });
 
@@ -92,7 +129,7 @@ describe('RPCClient', () => {
             1704153600,
             10
           )
-        ).rejects.toThrow('No signer available. Instantiate RPCClient with a privateKey to perform write operations.');
+        ).rejects.toThrow('No signer available. Provide either a privateKey or externalSigner.');
       });
 
       it('should throw error if mintCertificate function is not found on contract (ABI mismatch)', async () => {
@@ -412,6 +449,118 @@ describe('RPCClient', () => {
         expect(receipt.blockNumber).toBe(33333);
         expect(receipt.transactionHash).toBe('0x3333333333333333333333333333333333333333333333333333333333333333');
         expect(receipt.gasUsed).toEqual(BigInt(260000));
+      });
+    });
+
+    describe('External Signer', () => {
+      it('should successfully mint certificate using external signer', async () => {
+        const mockExternalSigner = {
+          getAddress: vi.fn().mockResolvedValue('0xExternalSignerAddress'),
+          signTransaction: vi.fn(),
+          signMessage: vi.fn()
+        } as any;
+
+        const client = new RPCClient(mockRpcUrl, undefined, mockExternalSigner);
+
+        const mockReceipt = {
+          status: 1,
+          blockNumber: 44444,
+          transactionHash: '0x4444444444444444444444444444444444444444444444444444444444444444',
+          gasUsed: BigInt(280000)
+        };
+
+        const mockTxResponse = {
+          wait: vi.fn().mockResolvedValue(mockReceipt)
+        };
+
+        const mockMintFunction = vi.fn().mockResolvedValue(mockTxResponse);
+        const mockContractExternal = { mintCertificate: mockMintFunction };
+        vi.mocked(ethers.Contract).mockReturnValueOnce(mockContractExternal as any);
+
+        const receipt = await client.mintCertificate(
+          mockContractAddress,
+          mockRecipientAddress,
+          'https://example.com/metadata.json',
+          'John Doe',
+          'CERT-12345',
+          'Advanced Blockchain Development',
+          'Blockchain University',
+          1704067200,
+          1704153600,
+          10
+        );
+
+        expect(receipt).toEqual(mockReceipt);
+        expect(receipt.status).toBe(1);
+        expect(ethers.Contract).toHaveBeenCalledWith(
+          mockContractAddress,
+          expect.any(Array),
+          mockExternalSigner
+        );
+      });
+
+      it('should throw error when neither external signer nor private key provided', async () => {
+        const client = new RPCClient(mockRpcUrl);
+
+        await expect(
+          client.mintCertificate(
+            mockContractAddress,
+            mockRecipientAddress,
+            'https://example.com/metadata.json',
+            'John Doe',
+            'CERT-12345',
+            'Advanced Blockchain Development',
+            'Blockchain University',
+            1704067200,
+            1704153600,
+            10
+          )
+        ).rejects.toThrow('No signer available. Provide either a privateKey or externalSigner.');
+      });
+
+      it('should prioritize external signer over wallet for minting', async () => {
+        const mockExternalSigner = {
+          getAddress: vi.fn().mockResolvedValue('0xExternalSignerAddress'),
+          signTransaction: vi.fn(),
+          signMessage: vi.fn()
+        } as any;
+
+        const client = new RPCClient(mockRpcUrl, mockPrivateKey, mockExternalSigner);
+
+        const mockReceipt = {
+          status: 1,
+          blockNumber: 55555,
+          transactionHash: '0x5555555555555555555555555555555555555555555555555555555555555555',
+          gasUsed: BigInt(290000)
+        };
+
+        const mockTxResponse = {
+          wait: vi.fn().mockResolvedValue(mockReceipt)
+        };
+
+        const mockMintFunction = vi.fn().mockResolvedValue(mockTxResponse);
+        const mockContractPriority = { mintCertificate: mockMintFunction };
+        vi.mocked(ethers.Contract).mockReturnValueOnce(mockContractPriority as any);
+
+        await client.mintCertificate(
+          mockContractAddress,
+          mockRecipientAddress,
+          'https://example.com/metadata.json',
+          'John Doe',
+          'CERT-12345',
+          'Advanced Blockchain Development',
+          'Blockchain University',
+          1704067200,
+          1704153600,
+          10
+        );
+
+        // Should use external signer, not wallet
+        expect(ethers.Contract).toHaveBeenCalledWith(
+          mockContractAddress,
+          expect.any(Array),
+          mockExternalSigner
+        );
       });
     });
   });
