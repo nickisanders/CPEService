@@ -227,6 +227,33 @@ describe('PrivyWalletService', () => {
       );
     });
 
+    it('should create signer that throws on signTypedData (not implemented)', async () => {
+      const mockUser = {
+        id: mockUserId,
+        linkedAccounts: [
+          {
+            type: 'wallet',
+            walletClientType: 'privy',
+            address: mockWalletAddress
+          }
+        ]
+      };
+
+      mockPrivyClient.getUserById.mockResolvedValue(mockUser);
+
+      const mockProvider = {} as ethers.Provider;
+      const service = new PrivyWalletService(mockAppId, mockAppSecret);
+      const signer = await service.createPrivySigner(mockUserId, mockProvider);
+
+      const domain = { name: 'Test', version: '1' };
+      const types = { Test: [{ name: 'value', type: 'string' }] };
+      const value = { value: 'test' };
+
+      await expect(signer.signTypedData(domain, types, value)).rejects.toThrow(
+        'signTypedData must be implemented with Privy API - see Privy docs for typed data signing endpoint'
+      );
+    });
+
     it('should create signer with connect method', async () => {
       const mockUser = {
         id: mockUserId,

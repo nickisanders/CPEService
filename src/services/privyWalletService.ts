@@ -25,7 +25,7 @@ export class PrivyWalletService {
     const user = await this.privyClient.getUserById(userId);
     const wallet = user.linkedAccounts?.find(
       (account) => account.type === 'wallet' && account.walletClientType === 'privy'
-    );
+    ) as any;
     
     if (!wallet || !wallet.address) {
       throw new Error(`No Privy embedded wallet found for user ${userId}`);
@@ -68,7 +68,7 @@ class PrivySigner extends ethers.AbstractSigner {
     return this._address;
   }
 
-  async signTransaction(transaction: ethers.TransactionRequest): Promise<string> {
+  async signTransaction(_transaction: ethers.TransactionRequest): Promise<string> {
     // TODO: Implement using Privy's server-side API for transaction signing
     // 
     // This method requires integration with Privy's REST API endpoints.
@@ -87,7 +87,7 @@ class PrivySigner extends ethers.AbstractSigner {
     throw new Error('signTransaction must be implemented with Privy API - see Privy docs for wallet signing endpoint');
   }
 
-  async signMessage(message: string | Uint8Array): Promise<string> {
+  async signMessage(_message: string | Uint8Array): Promise<string> {
     // TODO: Implement using Privy's server-side API for message signing
     //
     // This method requires integration with Privy's REST API endpoints.
@@ -104,6 +104,28 @@ class PrivySigner extends ethers.AbstractSigner {
     // const response = await this.privyClient.signMessage(this.userId, messageHex);
     // return response.signature;
     throw new Error('signMessage must be implemented with Privy API - see Privy docs for message signing endpoint');
+  }
+
+  async signTypedData(
+    _domain: ethers.TypedDataDomain,
+    _types: Record<string, ethers.TypedDataField[]>,
+    _value: Record<string, any>
+  ): Promise<string> {
+    // TODO: Implement using Privy's server-side API for typed data signing
+    //
+    // This method requires integration with Privy's REST API endpoints.
+    // The implementation should:
+    // 1. Encode the typed data according to EIP-712
+    // 2. Call Privy's API endpoint to sign the typed data
+    // 3. Return the signature as a hex string
+    //
+    // Reference: https://docs.privy.io/guide/server-wallets/signing
+    // API endpoint example: POST /api/v1/wallets/{wallet_id}/sign_typed_data
+    //
+    // Example implementation structure:
+    // const response = await this.privyClient.signTypedData(this.userId, domain, types, value);
+    // return response.signature;
+    throw new Error('signTypedData must be implemented with Privy API - see Privy docs for typed data signing endpoint');
   }
 
   connect(provider: ethers.Provider): ethers.Signer {
